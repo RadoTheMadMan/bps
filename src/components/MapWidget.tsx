@@ -47,23 +47,31 @@ export default function MapWidget({
           <Popup><span className="text-zinc-900 font-bold">Your Position</span></Popup>
         </Marker>
         
-        {places.map((place) => (
-          <Marker 
-            key={place.id} 
-            position={[Number(place.latitude), Number(place.longitude)]} 
-            icon={storeIcon}
-            eventHandlers={{
-              click: () => onMarkerClick(place)
-            }}
-          >
-            <Popup>
-              <div className="text-zinc-900 p-1">
-                <p className="font-bold m-0">{place.name}</p>
-                <p className="text-xs text-zinc-500 m-0">{place.address}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {places.map((place) => {
+  const lat = Number(place.latitude);
+  const lon = Number(place.longitude);
+  
+  // Skip corrupt or unparsed database rows to prevent breaking the layout engine
+  if (isNaN(lat) || isNaN(lon)) return null;
+
+  return (
+    <Marker 
+      key={place.id} 
+      position={[lat, lon]} 
+      icon={storeIcon}
+      eventHandlers={{
+        click: () => onMarkerClick(place)
+      }}
+    >
+      <Popup>
+        <div className="text-zinc-900 p-1 font-sans">
+          <p className="font-bold m-0 text-sm uppercase">{place.name}</p>
+          <p className="text-xs text-zinc-500 m-0 mt-0.5">{place.address}</p>
+        </div>
+      </Popup>
+    </Marker>
+  );
+})}
         <MapRecenter center={userLocation} />
       </MapContainer>
     </div>
