@@ -1,6 +1,6 @@
 'use client';
 import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -14,16 +14,13 @@ const createSvgIcon = (color: string) => {
   });
 };
 
-const userIcon = createSvgIcon('#dc2626'); // Red marker
-const storeIcon = createSvgIcon('#3b82f6'); // Blue marker
+const userIcon = createSvgIcon('#dc2626'); 
+const storeIcon = createSvgIcon('#3b82f6'); 
 
 function MapRecenter({ center }: { center: [number, number] }) {
   const map = useMap();
   useEffect(() => {
-    if (center) {
-      // Force high-detail zoom level 16 so street and building names materialize immediately
-      map.setView(center, 16);
-    }
+    if (center) map.setView(center, 15);
   }, [center, map]);
   return null;
 }
@@ -31,6 +28,7 @@ function MapRecenter({ center }: { center: [number, number] }) {
 export default function MapWidget({ 
   userLocation, 
   places, 
+  radiusKm, 
   onMarkerClick 
 }: { 
   userLocation: [number, number]; 
@@ -40,14 +38,25 @@ export default function MapWidget({
 }) {
   return (
     <div className="w-full h-full min-h-[350px] relative">
-      <MapContainer center={userLocation} zoom={16} style={{ height: '100%', width: '100%' }}>
-        {/* FREE PUBLIC OPENSTREETMAP DARK TILES - NO API KEYS REQUIRED */}
-       <TileLayer
-  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  url="https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png"
-  className="dark:invert-[0.9] dark:hue-rotate-180" // If you want to force-invert the bright theme into custom industrial black
-/>
+      <MapContainer center={userLocation} zoom={15} style={{ height: '100%', width: '100%' }}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png"
+        />
         
+        {/* VISUAL EXTENT SCANNER RING */}
+        <Circle 
+          center={userLocation}
+          radius={radiusKm * 1000} // Convert to meters
+          pathOptions={{
+            color: '#dc2626',
+            fillColor: '#dc2626',
+            fillOpacity: 0.12,
+            weight: 2,
+            dashArray: '6, 6'
+          }}
+        />
+
         <Marker position={userLocation} icon={userIcon}>
           <Popup><span className="text-zinc-900 font-bold">Your Position</span></Popup>
         </Marker>
