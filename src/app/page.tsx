@@ -19,16 +19,27 @@ export default function MobileDashboard() {
   const [scanning, setScanning] = useState<boolean>(false);
 
   // Read data points directly from your Supabase location log table
-  const syncDatabaseView = async () => {
-    const { data, error } = await supabase
-      .from('places')
-      .select('*')
-      .order('created_at', { ascending: false });
-      
-    if (!error && data) {
-      setPlaces(data);
-    }
-  };
+ const syncDatabaseView = async () => {
+  const { data, error } = await supabase
+    .from('places')
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (!error && data && data.length > 0) {
+    setPlaces(data);
+  } else {
+    // FORCE A HARDCODED TESTING PIN RIGHT NEXT TO ODRIN STREET TO PROVE RENDERING WORKS
+    setPlaces([
+      {
+        id: 'test-uuid-12345',
+        name: 'HELLRIDER SUPPLIES (TEST VENDOR)',
+        address: 'ul. Odrin, Burgas',
+        latitude: 42.5065,  // Just slightly north of your current pin
+        longitude: 27.4610
+      }
+    ]);
+  }
+};
 
   // Request browser geolocation paths immediately on mount
   useEffect(() => {
