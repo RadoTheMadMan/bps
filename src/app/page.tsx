@@ -17,10 +17,9 @@ export default function MobileDashboard() {
   const [activePlace, setActivePlace] = useState<any>(null);
   const [scanning, setScanning] = useState<boolean>(false);
 
-  // Sync state data from the actual database tables
   const syncDatabaseView = async () => {
-    const { data } = await supabase.from('places').select('*');
-    if (data) setPlaces(data);
+    const { data, error } = await supabase.from('places').select('*');
+    if (!error && data) setPlaces(data);
   };
 
   useEffect(() => {
@@ -40,12 +39,12 @@ export default function MobileDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ latitude: userLocation[0], longitude: userLocation[1], radiusKm })
       });
-      const data = await res.json();
-      if (data.success) {
+      const resData = await res.json();
+      if (resData.success) {
         await syncDatabaseView();
       }
     } catch (err) {
-      console.error(err);
+      console.error("Client transmission pipeline crash:", err);
     } finally {
       setScanning(false);
     }
