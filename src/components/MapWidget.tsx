@@ -1,8 +1,9 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+
 
 const createSvgIcon = (color: string) => {
   return new L.DivIcon({
@@ -66,6 +67,15 @@ export default function MapWidget({
           const lon = Number(place.longitude);
           if (isNaN(lat) || isNaN(lon)) return null;
 
+          // Inside your main MapWidget function, before the return statement:
+          const [mounted, setMounted] = useState(false);
+
+          setMounted(true);
+          useEffect(() => {  
+          }, []);
+          if (!mounted) {
+          return <div className="w-full h-[350px] bg-zinc-900 animate-pulse rounded-lg border border-zinc-800" />;
+          }
           return (
             <Marker 
               key={place.id} 

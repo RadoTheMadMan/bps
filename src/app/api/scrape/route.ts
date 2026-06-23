@@ -60,38 +60,51 @@ export async function POST(req: Request) {
       const num = element.tags['addr:housenumber'] || '';
       const addressString = street ? `${street} ${num}`.trim() : 'Local Coordinate Point';
 
-      console.log(`   > Upserting Node ID ${element.id}: "${name}" at [${element.lat}, ${element.lon}]`);
+     // Replace the old Supabase block inside the loop with this:
+console.log(`   > Checking/Inserting Node ID ${element.id}: "${name}" at [${element.lat}, ${element.lon}]`);
 
-      const { data: placeRecord, error: placeErr } = await supabase
-        .from('places')
-        .upsert({
-          name: name,
-          address: addressString,
-          latitude: element.lat,
-          longitude: element.lon
-        }, { onConflict: 'name,latitude,longitude' })
-        .select()
-        .single();
+// 1. Try to see if this exact point already exists to prevent crashes
+let { data: existingPlace } = await supabase
+  .from('places')
+  .select('*')
+  .eq('latitude', element.lat)
+  .eq('longitude', element.lon)
+  .maybeSingle();
 
-      if (placeErr) {
-        console.error(`   !! [SUPABASE PLACES ERROR] for "${name}":`, placeErr.message);
-        continue;
-      }
+let placeRecord = existingPlace;
 
-      if (placeRecord) {
-        processedPlaces.push(placeRecord);
-        
-        // Instant stub seed tracking verification log
-        const { error: itemErr } = await supabase.from('items').upsert({
-          place_id: placeRecord.id,
-          name: "Verified Market Staple",
-          price: 2.80,
-          category: "groceries",
-          is_spicy: false
-        });
-        
-        if (itemErr) console.error(`   !! [SUPABASE ITEMS ERROR] for execution sync:`, itemErr.message);
-      }
+if (!placeRecord) {
+  // 2. If it's unique, insert it cleanly without relying on an upsert index bind
+  const { data: newPlace, error: insertErr } = await supabase
+    .from('places')
+    .insert({
+      name: name,
+      address: addressString,
+      latitude: element.lat,
+      longitude: element.lon
+    })
+    .select()
+    .single();
+
+  if (insertErr) {
+    console.error(`   !! [SUPABASE INSERT ERROR] for "${name}":`, insertErr.message);
+    continue;
+  }
+  placeRecord = newPlace;
+}
+
+if (placeRecord) {
+  processedPlaces.push(placeRecord);
+  
+  // Seed verification item attachment tracking
+  await supabase.from('items').upsert({
+    place_id: placeRecord.id,
+    name: "Verified Market Staple",
+    price: 2.80,
+    category: "groceries",
+    is_spicy: false
+  }, { onConflict: 'id' }); // Standard primary key conflict target
+}
     }
 
     console.log(`-> [STEP 7: SUCCESSFUL PIPELINE COMPLETION]: Transmitted ${processedPlaces.length} entries to client view.`);
