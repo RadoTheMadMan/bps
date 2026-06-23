@@ -1,16 +1,22 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-// Fix default Leaflet icon paths in Next.js
-const customIcon = new L.Icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+// Create a bulletproof inline SVG icon to completely bypass asset path resolution bugs
+const createSvgIcon = (color: string) => {
+  return new L.DivIcon({
+    html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
+    className: 'custom-svg-icon',
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
+};
+
+const userIcon = createSvgIcon('#dc2626'); // Red marker for user location
+const storeIcon = createSvgIcon('#3b82f6'); // Blue marker for grocery stores
 
 function MapRecenter({ center }: { center: [number, number] }) {
   const map = useMap();
@@ -23,7 +29,6 @@ function MapRecenter({ center }: { center: [number, number] }) {
 export default function MapWidget({ 
   userLocation, 
   places, 
-  radiusKm, 
   onMarkerClick 
 }: { 
   userLocation: [number, number]; 
@@ -32,23 +37,32 @@ export default function MapWidget({
   onMarkerClick: (place: any) => void;
 }) {
   return (
-    <div className="w-full h-[350px] md:h-[450px] rounded-lg overflow-hidden border border-zinc-800 relative z-10">
+    <div className="w-full h-full min-h-[350px] relative">
       <MapContainer center={userLocation} zoom={13} style={{ height: '100%', width: '100%' }}>
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          attribution='© OpenStreetMap contributors'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        <Marker position={userLocation} icon={customIcon}>
-          <Popup><span className="text-zinc-900 font-bold">Your Location</span></Popup>
+        <Marker position={userLocation} icon={userIcon}>
+          <Popup><span className="text-zinc-900 font-bold">Your Position</span></Popup>
         </Marker>
         
         {places.map((place) => (
           <Marker 
             key={place.id} 
-            position={[place.latitude, place.longitude]} 
-            icon={customIcon}
-            eventHandlers={{ click: () => onMarkerClick(place) }}
-          />
+            position={[Number(place.latitude), Number(place.longitude)]} 
+            icon={storeIcon}
+            eventHandlers={{
+              click: () => onMarkerClick(place)
+            }}
+          >
+            <Popup>
+              <div className="text-zinc-900 p-1">
+                <p className="font-bold m-0">{place.name}</p>
+                <p className="text-xs text-zinc-500 m-0">{place.address}</p>
+              </div>
+            </Popup>
+          </Marker>
         ))}
         <MapRecenter center={userLocation} />
       </MapContainer>
