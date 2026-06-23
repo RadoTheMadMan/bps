@@ -42,10 +42,11 @@ export default function MapWidget({
     <div className="w-full h-full min-h-[350px] relative">
       <MapContainer center={userLocation} zoom={16} style={{ height: '100%', width: '100%' }}>
         {/* FREE PUBLIC OPENSTREETMAP DARK TILES - NO API KEYS REQUIRED */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        />
+       <TileLayer
+  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  url="https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png"
+  className="dark:invert-[0.9] dark:hue-rotate-180" // If you want to force-invert the bright theme into custom industrial black
+/>
         
         <Marker position={userLocation} icon={userIcon}>
           <Popup><span className="text-zinc-900 font-bold">Your Position</span></Popup>

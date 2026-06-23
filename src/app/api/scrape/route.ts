@@ -16,8 +16,7 @@ export async function POST(req: Request) {
     const radiusMeters = Math.round((radiusKm || 5) * 1000);
 
     // Flat, strictly formatted OverpassQL query line
-    const query = `[out:json][timeout:30];(node["shop"="supermarket"](around:${radiusMeters},${latitude},${longitude});node["shop"="grocery"](around:${radiusMeters},${latitude},${longitude});node["shop"="bakery"](around:${radiusMeters},${latitude},${longitude});node["amenity"="fast_food"](around:${radiusMeters},${latitude},${longitude}););out body;`;
-    
+    const query = `[out:json][timeout:30];(node["shop"](around:${radiusMeters},${latitude},${longitude});node["amenity"="marketplace"](around:${radiusMeters},${latitude},${longitude});node["amenity"="fast_food"](around:${radiusMeters},${latitude},${longitude}););out body;`;
     // Force headers to mimic a verified browser request to bypass the 406 barrier
     const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
