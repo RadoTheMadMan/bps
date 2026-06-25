@@ -12,9 +12,11 @@ export default function LoginPage() {
     const { error } = type === 'login' 
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password });
-
-    if (error) alert(error.message);
-    else router.push('/dashboard');
+// Replace the alert line in handleAuth with this to expose the ghost:
+  if (error) {
+    console.error("Full Auth Error Details:", error);
+    alert(error.message || JSON.stringify(error));
+    }
   };
 
   return (
