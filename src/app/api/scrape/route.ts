@@ -54,6 +54,23 @@ export async function POST(req: Request) {
 
     const processedPlaces = [];
 
+    console.log(`-> [STEP 6: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
+
+    // --- ADD THIS AUTH DEBUG BLOCK BEFORE THE INSERT LOOP ---
+    var session = supabase.auth.getSession();
+    if (session == null)
+    {
+      console.warn("-> [AUTH CONTEXT]: No active session found. Request is running as unauthenticated (Anon Key).");
+    }
+else
+{
+  
+    console.log("-> [AUTH CONTEXT]: Active Session Found!");
+    console.log("   - User ID: {session.User?.Id}");
+    console.log("   - Role: {session.User?.Role}");
+    console.log("   - Token Expires At: {session.ExpiresAt}");
+    console.log("   - Email: {session.User?.Email}");
+
     for (const element of discoveredElements) {
       const name = element.tags.name || `Local Shop (${element.tags.shop || 'Vendor'})`;
       const street = element.tags['addr:street'] || '';
@@ -106,6 +123,10 @@ if (placeRecord) {
   }, { onConflict: 'id' }); // Standard primary key conflict target
 }
     }
+}
+// ---------------------------------------------------------
+
+    
 
     console.log(`-> [STEP 7: SUCCESSFUL PIPELINE COMPLETION]: Transmitted ${processedPlaces.length} entries to client view.`);
     console.log("================ [SCAN LOG END] ================");
