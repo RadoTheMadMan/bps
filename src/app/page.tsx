@@ -1,150 +1,110 @@
+// app/page.tsx
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import dynamic from 'next/dynamic';
-import { createClient } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
+import { UserProfile } from '@/types/database';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+export default function TestHubPage() {
+  const [sessionUser, setSessionUser] = useState<any>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
-const MapWidget = dynamic(() => import('@/components/MapWidget'), { ssr: false });
+  useEffect(() => {
+    // Check initial auth state
+    async function loadSession() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-export default function MobileDashboard() {
-  // Center fallback on Burgas center
-  const [userLocation, setUserLocation] = useState<[number, number]>([42.5046, 27.4626]); 
-  const [radiusKm, setRadiusKm] = useState<number>(5);
-  const [places, setPlaces] = useState<any[]>([]);
-  const [activePlace, setActivePlace] = useState<any>(null);
-  const [scanning, setScanning] = useState<boolean>(false);
-
-  // Sync existing database state
-  const syncDatabaseView = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('places')
-      .select('*')
-      .order('created_at', { ascending: false });
-      
-    if (!error && data) {
-      setPlaces(data);
+      setSessionUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id);
+      setLoading(false);
     }
+
+    loadSession();
+
+    // Listen for auth adjustments during testing
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
+      setSessionUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id);
+      else setProfile(null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Automated background scanning handler
-  const executeAutomaticScan = useCallback(async (lat: number, lon: number, currentRadius: number) => {
-    setScanning(true);
-    try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude: lat, longitude: lon, radiusKm: currentRadius })
-      });
-      
-      const resData = await res.json();
-      if (resData.success) {
-        // Instantly populate map with fresh live data
-        await syncDatabaseView();
-      }
-    } catch (err) {
-      console.error("Automated target scanning failed:", err);
-    } finally {
-      setScanning(false);
-    }
-  }, [syncDatabaseView]);
+  const fetchProfile = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (!error && data) setProfile(data as UserProfile);
+  };
 
-  // Handle initialization and geolocation updates
-  useEffect(() => {
-    // 1. Pull whatever we already have cached in the database right away
-    syncDatabaseView();
-
-    // 2. Request real-time location access from the device browser
-    if (typeof window !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          setUserLocation([lat, lon]);
-          
-          // CRITICAL: Force immediate automated data harvest the second permissions are granted
-          executeAutomaticScan(lat, lon, radiusKm);
-        },
-        (err) => {
-          console.warn("Location permission deferred. Defaulting to Burgas anchor and autoscan.", err.message);
-          // Fallback auto-scan with default coordinates if device GPS is turned off
-          executeAutomaticScan(42.5046, 27.4626, radiusKm);
-        },
-        { enableHighAccuracy: true, timeout: 12000 }
-      );
-    }
-  }, [syncDatabaseView, executeAutomaticScan, radiusKm]);
+  if (loading) return <div className="p-8 text-zinc-400 font-mono">Initializing System Terminal...</div>;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col max-w-md mx-auto border-x border-zinc-900 pb-24 shadow-2xl">
-      <header className="p-4 border-b border-zinc-900 sticky top-0 bg-zinc-950/90 backdrop-blur z-40 flex justify-between items-center">
-        <h1 className="text-xl font-black text-red-600 tracking-wider">BALKAN POCKET SAVER</h1>
-        <div className="flex items-center space-x-2">
-          {scanning && (
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-            </span>
-          )}
-          <span className="text-xs font-mono uppercase tracking-tight text-zinc-400">
-            {scanning ? 'SCANNING LIVE...' : 'SYSTEM READY'}
+    <main className="min-h-screen bg-zinc-950 text-zinc-100 font-mono p-8 flex flex-col justify-between">
+      {/* Top Banner / Identity Matrix */}
+      <div className="border border-zinc-800 p-6 bg-zinc-900/50 rounded shadow-xl">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-xl font-bold tracking-wider text-red-500">ANTI-BROKE TEST PANEL v1.0</h1>
+          <span className={`text-xs px-2 py-1 rounded border ${sessionUser ? 'border-green-500 text-green-400 bg-green-950/30' : 'border-amber-500 text-amber-400 bg-amber-950/30'}`}>
+            STATUS: {sessionUser ? 'AUTHENTICATED' : 'ANONYMOUS TERMINAL'}
           </span>
         </div>
-      </header>
 
-      <div className="p-4 flex-1 space-y-4 overflow-y-auto">
-        {/* Spatial Radius Box */}
-        <div className="bg-zinc-900 p-4 border border-zinc-850 rounded-lg">
-          <div className="flex justify-between text-xs font-mono uppercase text-zinc-400 mb-2">
-            <span>Range Target</span>
-            <span className="text-red-500 font-bold">{radiusKm} KM</span>
+        {sessionUser ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-zinc-950 p-4 border border-zinc-800 rounded">
+            <div>
+              <p className="text-zinc-400">User ID: <span className="text-zinc-200">{sessionUser.id}</span></p>
+              <p className="text-zinc-400">Identity Target: <span className="text-zinc-200">{sessionUser.email}</span></p>
+            </div>
+            {profile && (
+              <div>
+                <p className="text-zinc-400">Deductible Margin: <span className="text-red-400">${profile.deductibles}</span></p>
+                <p className="text-zinc-400">Target Budget Limit: <span className="text-blue-400">${profile.target_budget}</span></p>
+              </div>
+            )}
           </div>
-          <input 
-            type="range" min="1" max="25" value={radiusKm} 
-            onChange={(e) => setRadiusKm(Number(e.target.value))}
-            className="w-full accent-red-600 bg-zinc-800 h-2 rounded cursor-pointer"
-          />
-        </div>
-
-        {/* Dynamic Leaflet Target Map Box */}
-        <div className="w-full h-[400px] rounded-lg overflow-hidden border border-zinc-800 bg-zinc-900 relative">
-          <MapWidget 
-            userLocation={userLocation} 
-            places={places} 
-            radiusKm={radiusKm} 
-            onMarkerClick={(p) => setActivePlace(p)} 
-          />
-        </div>
-
-        {/* Real-time Metric Aggregator */}
-        <div className="text-xs font-mono text-zinc-500 text-center uppercase tracking-wider">
-          Tracking <span className="text-zinc-200 font-black">{places.length}</span> Active Local Vendors
-        </div>
+        ) : (
+          <p className="text-sm text-zinc-500 italic">No active session found. Database operations restricted to anon schema policies.</p>
+        )}
       </div>
 
-      {/* Target Modal Sheets */}
-      {activePlace && (
-        <div className="fixed inset-x-0 bottom-0 bg-zinc-900 border-t border-zinc-800 p-6 z-50 rounded-t-2xl max-w-md mx-auto shadow-2xl animate-slide-up">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-lg font-black uppercase tracking-tight text-zinc-100">{activePlace.name}</h3>
-              <p className="text-xs text-zinc-400">{activePlace.address}</p>
-            </div>
-            <button onClick={() => setActivePlace(null)} className="text-zinc-500 hover:text-zinc-100 font-bold p-1 text-lg">✕</button>
-          </div>
-          
-          <a 
-            href={`https://www.google.com/maps/search/?api=1&query=${activePlace.latitude},${activePlace.longitude}`}
-            target="_blank" rel="noopener noreferrer"
-            className="block w-full text-center bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded uppercase text-xs tracking-widest transition"
-          >
-            Launch Route Navigation
-          </a>
-        </div>
-      )}
+      {/* Navigation Matrix */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 my-8">
+        <Link href="/login" className="p-6 border border-zinc-800 bg-zinc-900 rounded hover:border-red-500 transition-all group">
+          <h3 className="font-bold text-lg group-hover:text-red-400 transition-colors">01 // Authentication</h3>
+          <p className="text-xs text-zinc-500 mt-2">Test registrations, DB triggers, logins, and key updates.</p>
+        </Link>
+
+        <Link href="/dashboard" className="p-6 border border-zinc-800 bg-zinc-900 rounded hover:border-blue-500 transition-all group">
+          <h3 className="font-bold text-lg group-hover:text-blue-400 transition-colors">02 // Financial View</h3>
+          <p className="text-xs text-zinc-500 mt-2">Verify real-time database CRUD streams and reactive metrics updates.</p>
+        </Link>
+
+        <Link href="/settings" className="p-6 border border-zinc-800 bg-zinc-900 rounded hover:border-green-500 transition-all group">
+          <h3 className="font-bold text-lg group-hover:text-green-400 transition-colors">03 // System Constants</h3>
+          <p className="text-xs text-zinc-500 mt-2">Test budget constraints, calculation engines, and inputs limit validation.</p>
+        </Link>
+
+        <Link href="/map" className="p-6 border border-zinc-800 bg-zinc-900 rounded hover:border-purple-500 transition-all group">
+          <h3 className="font-bold text-lg group-hover:text-purple-400 transition-colors">04 // Geo Navigation</h3>
+          <p className="text-xs text-zinc-500 mt-2">Access your map engine, scrape node tracking, and spatial routines.</p>
+        </Link>
+      </div>
+
+      {/* Terminal Footer */}
+      <div className="text-center text-[10px] text-zinc-600 border-t border-zinc-900 pt-4">
+        Framework compiled successfully. Execution loops online.
+      </div>
     </main>
   );
 }
