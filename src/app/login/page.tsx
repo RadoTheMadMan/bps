@@ -8,16 +8,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const router = useRouter();
 
-  const handleAuth = async (type: 'login' | 'register') => {
-    const { error } = type === 'login' 
+const handleAuth = async (type: 'login' | 'register') => {
+  try {
+    const { data, error } = type === 'login' 
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password });
-// Replace the alert line in handleAuth with this to expose the ghost:
-  if (error) {
-    console.error("Full Auth Error Details:", error);
-    alert(error.message || JSON.stringify(error));
+
+    if (error) {
+      console.error("Full Auth Error Details:", error);
+      // Force non-enumerable properties to be readable in the alert
+      alert(`AUTH ERROR:\nName: ${error.name}\nMessage: ${error.message}\nStatus: ${error.status}`);
+      return;
     }
-  };
+
+    // Success check
+    if (data?.session) {
+      router.push('/dashboard');
+    }
+  } catch (catchError: any) {
+    console.error("Runtime Exception:", catchError);
+    alert(`RUNTIME EXCEPTION:\n${catchError?.message || catchError}`);
+  }
+};
 
   return (
     <div className="flex flex-col max-w-md mx-auto my-12 p-6 border rounded shadow">
