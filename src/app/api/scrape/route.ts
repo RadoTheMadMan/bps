@@ -14,19 +14,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Coordinates required" }, { status: 400 });
     }
 
-    // Initialize the Supabase Client dynamically per request using the incoming cookies
-const cookieStore = await cookies();
-const supabase = createServerClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
-      },
-    },
-  }
-);
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: async () => {
+            const all = cookieStore.getAll();
+            return all ? all.map((cookie: { name: string; value: string }) => ({
+              name: cookie.name,
+              value: cookie.value,
+            })) : [];
+          },
+        },
+      }
+    );
+
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error || !session) {
+      console.warn("No active session found on the server.");
+    } else {
+      console.log("Current Logged In User ID:", session.user.id);
+    }
 
     const radiusMeters = Math.round((radiusKm || 5) * 1000);
     console.log(`-> [STEP 2: TARGET PARAMETERS]: Lat: ${latitude}, Lon: ${longitude}, Range: ${radiusMeters} meters`);
@@ -64,16 +75,10 @@ const supabase = createServerClient(
     const processedPlaces = [];
     console.log(`-> [STEP 6: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
 
-    // This will now successfully read the cookie session!
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) {
-      console.error("!! [SUPABASE AUTH ERROR]:", sessionError.message);
-    }
-
-    if (!sessionData?.session) {
+    if (!session) {
       console.warn("-> [AUTH CONTEXT]: No active session found. Request is running as unauthenticated (Anon Key).");
     } else {
-      const { user, expires_at } = sessionData.session;
+      const { user } = session;
       console.log("-> [AUTH CONTEXT]: Active Session Found!");
       console.log(`   - User ID: ${user?.id}`);
       console.log(`   - Role:   ${user?.role}`);
@@ -137,4 +142,4 @@ const supabase = createServerClient(
     console.log("================ [SCAN LOG END] ================");
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
-}
+    }
