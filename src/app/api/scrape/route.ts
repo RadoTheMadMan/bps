@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function POST(req: Request) {
   console.log("================ [SCAN LOG START] ================");
@@ -18,10 +14,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Coordinates required" }, { status: 400 });
     }
 
+    // Initialize the Supabase Client dynamically per request using the incoming cookies
+const cookieStore = await cookies();
+const supabase = createServerClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+    },
+  }
+);
+
     const radiusMeters = Math.round((radiusKm || 5) * 1000);
     console.log(`-> [STEP 2: TARGET PARAMETERS]: Lat: ${latitude}, Lon: ${longitude}, Range: ${radiusMeters} meters`);
 
-    // Ultra-wide dragnet query to make sure we don't return an empty array
     const query = `[out:json][timeout:30];(node["shop"](around:${radiusMeters},${latitude},${longitude});node["amenity"="marketplace"](around:${radiusMeters},${latitude},${longitude});node["amenity"="fast_food"](around:${radiusMeters},${latitude},${longitude}););out body;`;
     console.log("-> [STEP 3: GENERATED OVERPASS QL]:", query);
 
@@ -53,9 +62,9 @@ export async function POST(req: Request) {
     }
 
     const processedPlaces = [];
-
     console.log(`-> [STEP 6: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
 
+    // This will now successfully read the cookie session!
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) {
       console.error("!! [SUPABASE AUTH ERROR]:", sessionError.message);
@@ -68,8 +77,6 @@ export async function POST(req: Request) {
       console.log("-> [AUTH CONTEXT]: Active Session Found!");
       console.log(`   - User ID: ${user?.id}`);
       console.log(`   - Role:   ${user?.role}`);
-      console.log(`   - Token Expires At: ${expires_at}`);
-      console.log(`   - Email: ${user?.email}`);
     }
 
     for (const element of discoveredElements) {
@@ -78,56 +85,48 @@ export async function POST(req: Request) {
       const num = element.tags['addr:housenumber'] || '';
       const addressString = street ? `${street} ${num}`.trim() : 'Local Coordinate Point';
 
-     // Replace the old Supabase block inside the loop with this:
-console.log(`   > Checking/Inserting Node ID ${element.id}: "${name}" at [${element.lat}, ${element.lon}]`);
+      console.log(`   > Checking/Inserting Node ID ${element.id}: "${name}" at [${element.lat}, ${element.lon}]`);
 
-// 1. Try to see if this exact point already exists to prevent crashes
-let { data: existingPlace } = await supabase
-  .from('places')
-  .select('*')
-  .eq('latitude', element.lat)
-  .eq('longitude', element.lon)
-  .maybeSingle();
+      let { data: existingPlace } = await supabase
+        .from('places')
+        .select('*')
+        .eq('latitude', element.lat)
+        .eq('longitude', element.lon)
+        .maybeSingle();
 
-let placeRecord = existingPlace;
+      let placeRecord = existingPlace;
 
-if (!placeRecord) {
-  // 2. If it's unique, insert it cleanly without relying on an upsert index bind
-  const { data: newPlace, error: insertErr } = await supabase
-    .from('places')
-    .insert({
-      name: name,
-      address: addressString,
-      latitude: element.lat,
-      longitude: element.lon
-    })
-    .select()
-    .single();
+      if (!placeRecord) {
+        const { data: newPlace, error: insertErr } = await supabase
+          .from('places')
+          .insert({
+            name: name,
+            address: addressString,
+            latitude: element.lat,
+            longitude: element.lon
+          })
+          .select()
+          .single();
 
-  if (insertErr) {
-    console.error(`   !! [SUPABASE INSERT ERROR] for "${name}":`, insertErr.message);
-    continue;
-  }
-  placeRecord = newPlace;
-}
+        if (insertErr) {
+          console.error(`   !! [SUPABASE INSERT ERROR] for "${name}":`, insertErr.message);
+          continue;
+        }
+        placeRecord = newPlace;
+      }
 
-if (placeRecord) {
-  processedPlaces.push(placeRecord);
-  
-  // Seed verification item attachment tracking
-  await supabase.from('items').upsert({
-    place_id: placeRecord.id,
-    name: "Verified Market Staple",
-    price: 2.80,
-    category: "groceries",
-    is_spicy: false
-  }, { onConflict: 'id' }); // Standard primary key conflict target
-}
+      if (placeRecord) {
+        processedPlaces.push(placeRecord);
+        
+        await supabase.from('items').upsert({
+          place_id: placeRecord.id,
+          name: "Verified Market Staple",
+          price: 2.80,
+          category: "groceries",
+          is_spicy: false
+        }, { onConflict: 'id' });
+      }
     }
-
-// ---------------------------------------------------------
-
-    
 
     console.log(`-> [STEP 7: SUCCESSFUL PIPELINE COMPLETION]: Transmitted ${processedPlaces.length} entries to client view.`);
     console.log("================ [SCAN LOG END] ================");
