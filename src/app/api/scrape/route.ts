@@ -56,20 +56,21 @@ export async function POST(req: Request) {
 
     console.log(`-> [STEP 6: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
 
-    // --- ADD THIS AUTH DEBUG BLOCK BEFORE THE INSERT LOOP ---
-    var session = supabase.auth.getSession();
-    if (session == null)
-    {
-      console.warn("-> [AUTH CONTEXT]: No active session found. Request is running as unauthenticated (Anon Key).");
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.error("!! [SUPABASE AUTH ERROR]:", sessionError.message);
     }
-else
-{
-  
-    console.log("-> [AUTH CONTEXT]: Active Session Found!");
-    console.log(`   - User ID: {session.user?.id}`);
-    console.log(`   - Role:   {session.user?.role}`);
-    console.log(`   - Token Expires At:  {session.expires_at}`);
-    console.log(`   - Email: + {session.user?.Email}`);
+
+    if (!sessionData?.session) {
+      console.warn("-> [AUTH CONTEXT]: No active session found. Request is running as unauthenticated (Anon Key).");
+    } else {
+      const { user, expires_at } = sessionData.session;
+      console.log("-> [AUTH CONTEXT]: Active Session Found!");
+      console.log(`   - User ID: ${user?.id}`);
+      console.log(`   - Role:   ${user?.role}`);
+      console.log(`   - Token Expires At: ${expires_at}`);
+      console.log(`   - Email: ${user?.email}`);
+    }
 
     for (const element of discoveredElements) {
       const name = element.tags.name || `Local Shop (${element.tags.shop || 'Vendor'})`;
@@ -123,7 +124,7 @@ if (placeRecord) {
   }, { onConflict: 'id' }); // Standard primary key conflict target
 }
     }
-}
+
 // ---------------------------------------------------------
 
     
