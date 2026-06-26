@@ -66,10 +66,10 @@ else
 {
   
     console.log("-> [AUTH CONTEXT]: Active Session Found!");
-    console.log("   - User ID: {session.User?.Id}");
-    console.log("   - Role: {session.User?.Role}");
-    console.log("   - Token Expires At: {session.ExpiresAt}");
-    console.log("   - Email: {session.User?.Email}");
+    console.log(`   - User ID: {session.user?.id}`);
+    console.log(`   - Role:   {session.user?.role}`);
+    console.log(`   - Token Expires At:  {session.expires_at}`);
+    console.log(`   - Email: + {session.user?.Email}`);
 
     for (const element of discoveredElements) {
       const name = element.tags.name || `Local Shop (${element.tags.shop || 'Vendor'})`;
