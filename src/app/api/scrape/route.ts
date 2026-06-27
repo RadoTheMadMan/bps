@@ -15,9 +15,9 @@ export async function POST(req: Request) {
 
     const supabase = await createServerInstance();
 
-    const { data: { session }, error } = await supabase.auth.getSession();
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-    if (error || !session) {
+    if (sessionError || !session) {
       console.warn("No active session found on the server.");
     } else {
       console.log("Current Logged In User ID:", session.user.id);
@@ -68,57 +68,33 @@ export async function POST(req: Request) {
       console.log(`   - Role:   ${user?.role}`);
     }
 
-    for (const element of discoveredElements) {
-      const name = element.tags.name || `Local Shop (${element.tags.shop || 'Vendor'})`;
-      const street = element.tags['addr:street'] || '';
-      const num = element.tags['addr:housenumber'] || '';
-      const addressString = street ? `${street} ${num}`.trim() : 'Local Coordinate Point';
+    const upsertPayload = discoveredElements.map((element: any) => ({
+      name: element.tags?.name || `Local Shop (${element.tags?.shop || 'Vendor'})`,
+      address: [element.tags?.['addr:street'], element.tags?.['addr:housenumber']]
+        .filter(Boolean)
+        .join(' ') || 'Local Coordinate Point',
+      latitude: element.lat,
+      longitude: element.lon,
+    }));
 
-      console.log(`   > Checking/Inserting Node ID ${element.id}: "${name}" at [${element.lat}, ${element.lon}]`);
+    const { data, error } = await supabase
+      .from('places')
+      .upsert(upsertPayload, {
+        onConflict: 'place_id',
+        ignoreDuplicates: true,
+      })
+      .select();
 
-      let { data: existingPlace } = await supabase
-        .from('places')
-        .select('*')
-        .eq('latitude', element.lat)
-        .eq('longitude', element.lon)
-        .maybeSingle();
-
-      let placeRecord = existingPlace;
-
-      if (!placeRecord) {
-        const { data: newPlace, error: insertErr } = await supabase
-          .from('places')
-          .insert({
-            name: name,
-            address: addressString,
-            latitude: element.lat,
-            longitude: element.lon
-          })
-          .select()
-          .single();
-
-        if (insertErr) {
-          console.error(`   !! [SUPABASE INSERT ERROR] for "${name}":`, insertErr.message);
-          continue;
-        }
-        placeRecord = newPlace;
-      }
-
-      if (placeRecord) {
-        processedPlaces.push(placeRecord);
-        
-        await supabase.from('items').upsert({
-          place_id: placeRecord.id,
-          name: "Verified Market Staple",
-          price: 2.80,
-          category: "groceries",
-          is_spicy: false
-        }, { onConflict: 'id' });
-      }
+    if (error) {
+      console.error('Bulk upsert failed:', error.message);
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    console.log(`-> [STEP 6: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
+    processedPlaces.push(...(data ?? []));
+
     console.log(`-> [STEP 7: SUCCESSFUL PIPELINE COMPLETION]: Transmitted ${processedPlaces.length} entries to client view.`);
-    console.log("================ [SCAN LOG END] ================");
+    console.log('================ [SCAN LOG END] ================');
     return NextResponse.json({ success: true, count: processedPlaces.length, places: processedPlaces });
 
   } catch (err: any) {
