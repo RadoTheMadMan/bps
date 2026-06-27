@@ -1,6 +1,91 @@
 import { NextResponse } from 'next/server';
 import { createServerInstance } from '@/utils/supabase/server';
 
+const FIRECRAWL_API_URL = process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev/v1';
+const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
+
+async function firecrawlRequest(path: string, body: Record<string, unknown>) {
+  if (!FIRECRAWL_API_KEY) {
+    return null;
+  }
+
+  const response = await fetch(`${FIRECRAWL_API_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Firecrawl request failed (${response.status}): ${errorText}`);
+  }
+
+  return response.json();
+}
+
+function buildFirecrawlSearchQuery(place: Record<string, any>) {
+  const baseName = place.name || 'local business';
+  const address = place.address && place.address !== 'Local Coordinate Point' ? place.address : '';
+  return `${baseName} ${address} website address`.trim();
+}
+
+async function enrichPlaceWithFirecrawl(place: Record<string, any>, supabase: any) {
+  if (!FIRECRAWL_API_KEY) {
+    console.log('-> [FIRECRAWL]: Skipping enrichment because FIRECRAWL_API_KEY is not configured.');
+    return;
+  }
+
+  try {
+    console.log(`-> [FIRECRAWL RUNNING]: Deep searching for ${place.name}`);
+
+    let discoveredUrl: string | null = null;
+    let discoveredSnippet = '';
+
+    if (typeof place.website === 'string' && place.website.startsWith('http')) {
+      const scrapeData = await firecrawlRequest('/scrape', {
+        url: place.website,
+        formats: ['markdown'],
+      });
+
+      discoveredUrl = place.website;
+      discoveredSnippet = scrapeData?.markdown || scrapeData?.content || '';
+    } else {
+      const searchData = await firecrawlRequest('/search', {
+        query: buildFirecrawlSearchQuery(place),
+        limit: 3,
+      });
+
+      const firstResult = Array.isArray(searchData?.data) ? searchData.data[0] : null;
+      discoveredUrl = firstResult?.url || firstResult?.website || null;
+      discoveredSnippet = firstResult?.snippet || firstResult?.markdown || '';
+    }
+
+    if (!discoveredUrl) {
+      console.log(`-> [FIRECRAWL]: No discoverable URL found for ${place.name}`);
+      return;
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      enrichment_status: 'enriched',
+      website: discoveredUrl,
+    };
+
+    if (typeof discoveredSnippet === 'string' && discoveredSnippet.length > 0 && (!place.address || place.address === 'Local Coordinate Point')) {
+      const addressHint = discoveredSnippet.match(/\b\d+\s+[A-Za-z0-9 .,'-]+\b/);
+      if (addressHint?.[0]) {
+        updatePayload.address = addressHint[0];
+      }
+    }
+
+    await supabase.from('places').update(updatePayload).eq('id', place.id);
+  } catch (error) {
+    console.error(`-> [FIRECRAWL ERROR] Failed background fetch for ${place.id}:`, error);
+  }
+}
+
 export async function POST(req: Request) {
   console.log("================ [SCAN LOG START] ================");
   try {
@@ -56,7 +141,7 @@ export async function POST(req: Request) {
       console.warn("?? [WARN]: Overpass query returned a clean 0 entries for this area range.");
     }
 
-    const processedPlaces = [];
+    const processedPlaces: any[] = [];
     console.log(`-> [STEP 7: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
 
     if (!session) {
@@ -110,52 +195,26 @@ export async function POST(req: Request) {
 
 
 // ==========================================
-    // NEW: FIRE AND FORGET ASYNC ENRICHMENT STEP
+    // FIRECRAWL ENRICHMENT PIPELINE
     // ==========================================
-    // We filter processedPlaces to find only rows that need background scraping
-    const targetsToEnrich = processedPlaces.filter(p => p.enrichment_status === 'raw_coordinates');
+    const targetsToEnrich = processedPlaces.filter((place: any) => place.enrichment_status === 'raw_coordinates');
 
     if (targetsToEnrich.length > 0) {
       console.log(`-> [ASYNC PIPELINE]: Spawning background enrichment for ${targetsToEnrich.length} target locations...`);
-      
-      // Fire the asynchronous block WITHOUT using "await". 
-      // The runtime processes this in the background while the user instantly gets their response.
-      (async () => {
-        // Process a tiny batch or send it to an internal route to prevent Vercel execution timeouts
-        for (const place of targetsToEnrich) { // Limit to a small number per scan to be safe
-          try {
-            console.log(`-> [FIRECRAWL RUNNING]: Deep searching extra tags for: ${place.name}`);
-            
-            // Example Firecrawl implementation framework:
-            // const scratchData = await firecrawl.search(`"${place.name}" Burgas address website vendor`);
-            // const scrapedUrl = scratchData[0]?.url || null;
-            // const scrapedAddr = scratchData[0]?.address || place.address;
 
-            // Simple demonstration placeholder update:
-            await supabase
-              .from('places')
-              .update({
-                // website: scrapedUrl,
-                // address: scrapedAddr,
-                enrichment_status: 'enriched'
-              })
-              .eq('id', place.id);
-
-          } catch (bgError) {
-            console.error(`-> [FIRECRAWL ERROR] Failed background fetch for ${place.id}:`, bgError);
-          }
+      void (async () => {
+        for (const place of targetsToEnrich) {
+          await enrichPlaceWithFirecrawl(place, supabase);
         }
-      })().catch(err => console.error("Fatal background pipeline crash:", err));
+      })().catch((err) => console.error('Fatal background pipeline crash:', err));
     }
 
-     console.log(`-> [PIPELINE COMPLETED]`);
-
+    console.log(`-> [PIPELINE COMPLETED]`);
     console.log('================ [SCAN LOG END] ================');
     return NextResponse.json({ success: true, count: processedPlaces.length, places: processedPlaces });
-
   } catch (err: any) {
     console.error("❌ [CRITICAL ENDPOINT CRASH LOG]:", err.message);
     console.log("================ [SCAN LOG END] ================");
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
-    }
+}
