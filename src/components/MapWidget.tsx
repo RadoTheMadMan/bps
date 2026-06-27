@@ -4,8 +4,10 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-le
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-
+// Helper function to create icons dynamically only on the client side
 const createSvgIcon = (color: string) => {
+  if (typeof window === 'undefined') return null; // Server fallback safely
+  
   return new L.DivIcon({
     html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
     className: 'custom-svg-icon',
@@ -14,9 +16,6 @@ const createSvgIcon = (color: string) => {
     popupAnchor: [0, -32]
   });
 };
-
-const userIcon = createSvgIcon('#dc2626'); 
-const storeIcon = createSvgIcon('#3b82f6'); 
 
 function MapRecenter({ center }: { center: [number, number] }) {
   const map = useMap();
@@ -37,6 +36,22 @@ export default function MapWidget({
   radiusKm: number;
   onMarkerClick: (place: any) => void;
 }) {
+  const [mounted, setMounted] = useState(false);
+
+  // Set mounted flag to true ONCE when the component reaches the client browser
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Safe UI Placeholder while server-side rendering or initializing
+  if (!mounted || typeof window === 'undefined') {
+    return <div className="w-full h-[400px] bg-zinc-900 animate-pulse rounded-lg border border-zinc-800" />;
+  }
+
+  // Safely instantiate icons now that we know we are running in a client context
+  const userIcon = createSvgIcon('#dc2626') as L.DivIcon; 
+  const storeIcon = createSvgIcon('#3b82f6') as L.DivIcon; 
+
   return (
     <div className="w-full h-full min-h-[350px] relative">
       <MapContainer center={userLocation} zoom={15} style={{ height: '100%', width: '100%' }}>
@@ -48,7 +63,7 @@ export default function MapWidget({
         {/* VISUAL EXTENT SCANNER RING */}
         <Circle 
           center={userLocation}
-          radius={radiusKm * 1000} // Convert to meters
+          radius={radiusKm * 1000} 
           pathOptions={{
             color: '#dc2626',
             fillColor: '#dc2626',
@@ -58,27 +73,20 @@ export default function MapWidget({
           }}
         />
 
-        <Marker position={userLocation} icon={userIcon}>
-          <Popup><span className="text-zinc-900 font-bold">Your Position</span></Popup>
-        </Marker>
+        {userIcon && (
+          <Marker position={userLocation} icon={userIcon}>
+            <Popup><span className="text-zinc-900 font-bold">Your Position</span></Popup>
+          </Marker>
+        )}
         
         {places.map((place) => {
           const lat = Number(place.latitude);
           const lon = Number(place.longitude);
           if (isNaN(lat) || isNaN(lon)) return null;
 
-          // Inside your main MapWidget function, before the return statement:
-          const [mounted, setMounted] = useState(false);
-
-          setMounted(true);
-          useEffect(() => {  
-          }, []);
-          if (!mounted) {
-          return <div className="w-full h-[350px] bg-zinc-900 animate-pulse rounded-lg border border-zinc-800" />;
-          }
           return (
             <Marker 
-              key={place.id} 
+              key={place.id || place.place_id} 
               position={[lat, lon]} 
               icon={storeIcon}
               eventHandlers={{ click: () => onMarkerClick(place) }}
