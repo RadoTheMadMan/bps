@@ -50,14 +50,14 @@ export async function POST(req: Request) {
 
     const overpassData = await overpassRes.json();
     const discoveredElements = overpassData.elements || [];
-    console.log(`-> [STEP 6: DISCOVERED NODES COUNT]: Found ${discoveredElements.length} raw map entities.`);
+    console.log(`-> [STEP 7: DISCOVERED NODES COUNT]: Found ${discoveredElements.length} raw map entities.`);
 
     if (discoveredElements.length === 0) {
       console.warn("?? [WARN]: Overpass query returned a clean 0 entries for this area range.");
     }
 
     const processedPlaces = [];
-    console.log(`-> [STEP 6: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
+    console.log(`-> [STEP 8: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
 
     if (!session) {
       console.warn("-> [AUTH CONTEXT]: No active session found. Request is running as unauthenticated (Anon Key).");
@@ -90,10 +90,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    console.log(`-> [STEP 6: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
+    console.log(`-> [STEP 9: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
     processedPlaces.push(...(data ?? []));
 
-    console.log(`-> [STEP 7: SUCCESSFUL PIPELINE COMPLETION]: Transmitted ${processedPlaces.length} entries to client view.`);
+    console.log(`-> [STEP 10: SUCCESSFUL PIPELINE COMPLETION]: Transmitted ${processedPlaces.length} entries to client view.`);
     console.log('================ [SCAN LOG END] ================');
     return NextResponse.json({ success: true, count: processedPlaces.length, places: processedPlaces });
 
