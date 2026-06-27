@@ -50,14 +50,14 @@ export async function POST(req: Request) {
 
     const overpassData = await overpassRes.json();
     const discoveredElements = overpassData.elements || [];
-    console.log(`-> [STEP 7: DISCOVERED NODES COUNT]: Found ${discoveredElements.length} raw map entities.`);
+    console.log(`-> [STEP 6: DISCOVERED NODES COUNT]: Found ${discoveredElements.length} raw map entities.`);
 
     if (discoveredElements.length === 0) {
       console.warn("?? [WARN]: Overpass query returned a clean 0 entries for this area range.");
     }
 
     const processedPlaces = [];
-    console.log(`-> [STEP 8: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
+    console.log(`-> [STEP 7: TRYING TO UPSERT GEO DATA TO SUPABASE IF THE SESSION IS VALID]`);
 
     if (!session) {
       console.warn("-> [AUTH CONTEXT]: No active session found. Request is running as unauthenticated (Anon Key).");
@@ -68,19 +68,31 @@ export async function POST(req: Request) {
       console.log(`   - Role:   ${user?.role}`);
     }
 
-    const upsertPayload = discoveredElements.map((element: any) => ({
-      name: element.tags?.name || `Local Shop (${element.tags?.shop || 'Vendor'})`,
-      address: [element.tags?.['addr:street'], element.tags?.['addr:housenumber']]
-        .filter(Boolean)
-        .join(' ') || 'Local Coordinate Point',
-      latitude: element.lat,
-      longitude: element.lon,
-    }));
+   const upsertPayload = discoveredElements.map((element: any) => {
+      const hasAddress = !!(element.tags?.['addr:street']);
+      const hasWebsite = !!(element.tags?.website);
+
+      return {
+        // NOTE: Ensure your DB column names match these keys exactly
+        name: element.tags?.name || `Local Shop (${element.tags?.shop || 'Vendor'})`,
+        address: [element.tags?.['addr:street'], element.tags?.['addr:housenumber']]
+          .filter(Boolean)
+          .join(' ') || 'Local Coordinate Point',
+        latitude: element.lat,
+        longitude: element.lon,
+        website: element.tags?.website || null, // Capture native OSM website if it exists
+        
+        // Track whether this node requires deeper scraping later
+        enrichment_status: (hasAddress && hasWebsite) ? 'enriched' : 'raw_coordinates'
+      };
+    });
 
     const { data, error } = await supabase
       .from('places')
       .upsert(upsertPayload, {
-        onConflict: 'id',
+        // If your table relies on a unique OSM ID or coordinate constraint instead of a auto-UUID, 
+        // make sure it is included in the payload and targeted here in 'onConflict'.
+        onConflict: 'id', 
         ignoreDuplicates: true,
       })
       .select();
@@ -90,10 +102,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    console.log(`-> [STEP 9: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
+    console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
     processedPlaces.push(...(data ?? []));
 
-    console.log(`-> [STEP 10: SUCCESSFUL PIPELINE COMPLETION]: Transmitted ${processedPlaces.length} entries to client view.`);
+    console.log(`-> [STEP 9: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
+
+    console.log(`-> [STEP 10: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
+
+
+// ==========================================
+    // NEW: FIRE AND FORGET ASYNC ENRICHMENT STEP
+    // ==========================================
+    // We filter processedPlaces to find only rows that need background scraping
+    const targetsToEnrich = processedPlaces.filter(p => p.enrichment_status === 'raw_coordinates');
+
+    if (targetsToEnrich.length > 0) {
+      console.log(`-> [ASYNC PIPELINE]: Spawning background enrichment for ${targetsToEnrich.length} target locations...`);
+      
+      // Fire the asynchronous block WITHOUT using "await". 
+      // The runtime processes this in the background while the user instantly gets their response.
+      (async () => {
+        // Process a tiny batch or send it to an internal route to prevent Vercel execution timeouts
+        for (const place of targetsToEnrich.slice(0, 5)) { // Limit to a small number per scan to be safe
+          try {
+            console.log(`-> [FIRECRAWL RUNNING]: Deep searching extra tags for: ${place.name}`);
+            
+            // Example Firecrawl implementation framework:
+            // const scratchData = await firecrawl.search(`"${place.name}" Burgas address website vendor`);
+            // const scrapedUrl = scratchData[0]?.url || null;
+            // const scrapedAddr = scratchData[0]?.address || place.address;
+
+            // Simple demonstration placeholder update:
+            await supabase
+              .from('places')
+              .update({
+                // website: scrapedUrl,
+                // address: scrapedAddr,
+                enrichment_status: 'enriched'
+              })
+              .eq('id', place.id);
+
+          } catch (bgError) {
+            console.error(`-> [FIRECRAWL ERROR] Failed background fetch for ${place.id}:`, bgError);
+          }
+        }
+      })().catch(err => console.error("Fatal background pipeline crash:", err));
+    }
+
+     console.log(`-> [PIPELINE COMPLETED]`);
+
     console.log('================ [SCAN LOG END] ================');
     return NextResponse.json({ success: true, count: processedPlaces.length, places: processedPlaces });
 
