@@ -105,9 +105,8 @@ export async function POST(req: Request) {
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
     processedPlaces.push(...(data ?? []));
 
-    console.log(`-> [STEP 9: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
 
-    console.log(`-> [STEP 10: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
+    console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
 
 
 // ==========================================
@@ -123,7 +122,7 @@ export async function POST(req: Request) {
       // The runtime processes this in the background while the user instantly gets their response.
       (async () => {
         // Process a tiny batch or send it to an internal route to prevent Vercel execution timeouts
-        for (const place of targetsToEnrich.slice(0, 5)) { // Limit to a small number per scan to be safe
+        for (const place of targetsToEnrich) { // Limit to a small number per scan to be safe
           try {
             console.log(`-> [FIRECRAWL RUNNING]: Deep searching extra tags for: ${place.name}`);
             
