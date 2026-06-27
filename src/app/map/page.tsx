@@ -6,7 +6,6 @@ import { getBrowserSupabase } from '@/utils/supabase/client';
 const MapWidget = dynamic(() => import('@/components/MapWidget'), { ssr: false });
 
 export default function MobileDashboard() {
-  // Center fallback on Burgas center
   const [userLocation, setUserLocation] = useState<[number, number]>([42.5046, 27.4626]); 
   const [radiusKm, setRadiusKm] = useState<number>(5);
   const [places, setPlaces] = useState<any[]>([]);
@@ -26,54 +25,52 @@ export default function MobileDashboard() {
     }
   }, []);
 
-  // Automated background scanning handler
-  const executeAutomaticScan = useCallback(async (lat: number, lon: number, currentRadius: number) => {
-    const supabase = getBrowserSupabase();
+  // Manual Trigger for Scraper Pipeline
+  const handleManualScan = async () => {
+    if (scanning) return;
     setScanning(true);
+    
     try {
+      console.log(`-> Initiating target scan: Lat: ${userLocation[0]}, Lon: ${userLocation[1]}, Rad: ${radiusKm}km`);
       const res = await fetch('/api/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude: lat, longitude: lon, radiusKm: currentRadius })
+        body: JSON.stringify({ 
+          latitude: userLocation[0], 
+          longitude: userLocation[1], 
+          radiusKm: radiusKm 
+        })
       });
       
       const resData = await res.json();
       if (resData.success) {
-        // Instantly populate map with fresh live data
+        // Instantly refresh frontend view with newly added places
         await syncDatabaseView();
       }
     } catch (err) {
-      console.error("Automated target scanning failed:", err);
+      console.error("Manual target scanning failed:", err);
     } finally {
       setScanning(false);
     }
-  }, [syncDatabaseView]);
+  };
 
-  // Handle initialization and geolocation updates
+  // Handle initial page load and device location positioning ONCE
   useEffect(() => {
-    // 1. Pull whatever we already have cached in the database right away
     syncDatabaseView();
 
-    // 2. Request real-time location access from the device browser
     if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          setUserLocation([lat, lon]);
-          
-          // CRITICAL: Force immediate automated data harvest the second permissions are granted
-          executeAutomaticScan(lat, lon, radiusKm);
+          setUserLocation([pos.coords.latitude, pos.coords.longitude]);
         },
         (err) => {
-          console.warn("Location permission deferred. Defaulting to Burgas anchor and autoscan.", err.message);
-          // Fallback auto-scan with default coordinates if device GPS is turned off
-          executeAutomaticScan(42.5046, 27.4626, radiusKm);
+          console.warn("Location permission deferred. Sticking to default Burgas coordinates.", err.message);
         },
         { enableHighAccuracy: true, timeout: 12000 }
       );
     }
-  }, [syncDatabaseView, executeAutomaticScan, radiusKm]);
+    // Clean array guarantees this ONLY executes once when the map mounts
+  }, [syncDatabaseView]);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col max-w-md mx-auto border-x border-zinc-900 pb-24 shadow-2xl">
@@ -93,17 +90,31 @@ export default function MobileDashboard() {
       </header>
 
       <div className="p-4 flex-1 space-y-4 overflow-y-auto">
-        {/* Spatial Radius Box */}
-        <div className="bg-zinc-900 p-4 border border-zinc-850 rounded-lg">
-          <div className="flex justify-between text-xs font-mono uppercase text-zinc-400 mb-2">
-            <span>Range Target</span>
-            <span className="text-red-500 font-bold">{radiusKm} KM</span>
+        {/* Spatial Radius Box & Target Scan Button */}
+        <div className="bg-zinc-900 p-4 border border-zinc-850 rounded-lg space-y-4">
+          <div>
+            <div className="flex justify-between text-xs font-mono uppercase text-zinc-400 mb-2">
+              <span>Range Target</span>
+              <span className="text-red-500 font-bold">{radiusKm} KM</span>
+            </div>
+            <input 
+              type="range" min="1" max="25" value={radiusKm} 
+              onChange={(e) => setRadiusKm(Number(e.target.value))}
+              className="w-full accent-red-600 bg-zinc-800 h-2 rounded cursor-pointer"
+            />
           </div>
-          <input 
-            type="range" min="1" max="25" value={radiusKm} 
-            onChange={(e) => setRadiusKm(Number(e.target.value))}
-            className="w-full accent-red-600 bg-zinc-800 h-2 rounded cursor-pointer"
-          />
+
+          <button
+            onClick={handleManualScan}
+            disabled={scanning}
+            className={`w-full py-3 rounded uppercase text-xs font-black tracking-widest transition duration-200 border ${
+              scanning 
+                ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' 
+                : 'bg-red-600 hover:bg-red-700 border-red-700 text-white shadow-md active:scale-[0.98]'
+            }`}
+          >
+            {scanning ? 'Processing Map Data...' : 'Scan Current Area'}
+          </button>
         </div>
 
         {/* Dynamic Leaflet Target Map Box */}
@@ -124,7 +135,7 @@ export default function MobileDashboard() {
 
       {/* Target Modal Sheets */}
       {activePlace && (
-        <div className="fixed inset-x-0 bottom-0 bg-zinc-900 border-t border-zinc-800 p-6 z-50 rounded-t-2xl max-w-md mx-auto shadow-2xl animate-slide-up">
+        <div className="fixed inset-x-0 bottom-0 bg-zinc-900 border-t border-zinc-800 p-6 z-50 rounded-t-2xl max-w-md mx-auto shadow-2xl">
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 className="text-lg font-black uppercase tracking-tight text-zinc-100">{activePlace.name}</h3>
