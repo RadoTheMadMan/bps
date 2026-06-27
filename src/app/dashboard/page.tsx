@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/utils/supabase/client';
+import { getBrowserSupabase } from '@/utils/supabase/client';
 import { UserProfile, MapPlace } from '@/types/database';
 
 export default function DashboardPage() {
@@ -8,6 +8,8 @@ export default function DashboardPage() {
   const [places, setPlaces] = useState<MapPlace[]>([]);
 
   useEffect(() => {
+    const supabase = getBrowserSupabase();
+
     // 1. Hook up the Realtime engine instantly
     const channel = supabase
       .channel('realtime-dashboard')

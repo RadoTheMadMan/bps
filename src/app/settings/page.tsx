@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { supabase } from '@/utils/supabase/client';
+import { getBrowserSupabase } from '@/utils/supabase/client';
 
 export default function SettingsPage() {
   const [income, setIncome] = useState(0);
@@ -18,6 +18,7 @@ export default function SettingsPage() {
       return;
     }
 
+    const supabase = getBrowserSupabase();
     const { error } = await supabase
       .from('users')
       .update({

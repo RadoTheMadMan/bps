@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { supabase } from '@/utils/supabase/client';
+import { getBrowserSupabase } from '@/utils/supabase/client';
 
 const MapWidget = dynamic(() => import('@/components/MapWidget'), { ssr: false });
 
@@ -15,6 +15,7 @@ export default function MobileDashboard() {
 
   // Sync existing database state
   const syncDatabaseView = useCallback(async () => {
+    const supabase = getBrowserSupabase();
     const { data, error } = await supabase
       .from('places')
       .select('*')
@@ -27,6 +28,7 @@ export default function MobileDashboard() {
 
   // Automated background scanning handler
   const executeAutomaticScan = useCallback(async (lat: number, lon: number, currentRadius: number) => {
+    const supabase = getBrowserSupabase();
     setScanning(true);
     try {
       const res = await fetch('/api/scrape', {

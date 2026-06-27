@@ -4,16 +4,13 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const globalClientKey = '__SUPABASE_BROWSER_CLIENT__';
 
-const browserSupabase =
-  typeof window !== 'undefined'
-    ? (globalThis as any)[globalClientKey] ??= createBrowserClient(supabaseUrl, supabaseAnonKey)
-    : undefined;
+export const getBrowserSupabase = () => {
+  if (typeof window === 'undefined') {
+    throw new Error(
+      'Supabase browser client can only be initialized in a browser runtime. Call getBrowserSupabase() from a client-side component or handler.'
+    );
+  }
 
-if (!browserSupabase) {
-  throw new Error(
-    'Supabase browser client must be initialized in a client-side context. Import this file only from "use client" components.'
-  );
-}
-
-export const supabase = browserSupabase;
-export const createClient = () => supabase;
+  const globalAny = globalThis as any;
+  return globalAny[globalClientKey] ??= createBrowserClient(supabaseUrl, supabaseAnonKey);
+};

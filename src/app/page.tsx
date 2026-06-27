@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '@/utils/supabase/client';
+import { getBrowserSupabase } from '@/utils/supabase/client';
 import { UserProfile } from '@/types/database';
 
 export default function TestHubPage() {
@@ -14,6 +14,7 @@ export default function TestHubPage() {
   useEffect(() => {
     // Check initial auth state
     async function loadSession() {
+      const supabase = getBrowserSupabase();
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -26,6 +27,7 @@ export default function TestHubPage() {
     loadSession();
 
     // Listen for auth adjustments during testing
+    const supabase = getBrowserSupabase();
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
@@ -38,6 +40,7 @@ export default function TestHubPage() {
   }, []);
 
   const fetchProfile = async (userId: string) => {
+    const supabase = getBrowserSupabase();
     const { data, error } = await supabase
       .from('users')
       .select('*')
