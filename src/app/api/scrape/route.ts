@@ -80,7 +80,7 @@ export async function POST(req: Request) {
     const { data, error } = await supabase
       .from('places')
       .upsert(upsertPayload, {
-        onConflict: 'place_id',
+        onConflict: 'id',
         ignoreDuplicates: true,
       })
       .select();
