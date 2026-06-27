@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/utils/supabase/client';
 import { UserProfile } from '@/types/database';
 
 export default function TestHubPage() {

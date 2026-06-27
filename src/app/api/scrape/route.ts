@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createServerInstance } from '@/utils/supabase/server';
 
 export async function POST(req: Request) {
   console.log("================ [SCAN LOG START] ================");
@@ -14,22 +13,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Coordinates required" }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: async () => {
-            const all = cookieStore.getAll();
-            return all ? all.map((cookie: { name: string; value: string }) => ({
-              name: cookie.name,
-              value: cookie.value,
-            })) : [];
-          },
-        },
-      }
-    );
+    const supabase = await createServerInstance();
 
     const { data: { session }, error } = await supabase.auth.getSession();
 

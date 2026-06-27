@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/utils/supabase/client';
 import { UserProfile, MapPlace } from '@/types/database';
 
 export default function DashboardPage() {
@@ -11,7 +11,7 @@ export default function DashboardPage() {
     // 1. Hook up the Realtime engine instantly
     const channel = supabase
       .channel('realtime-dashboard')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload: any) => {
         setProfile(payload.new as UserProfile);
       })
       .subscribe();

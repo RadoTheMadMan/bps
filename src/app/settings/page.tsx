@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/utils/supabase/client';
 
 export default function SettingsPage() {
   const [income, setIncome] = useState(0);
