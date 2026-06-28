@@ -193,34 +193,31 @@ export async function POST(req: Request) {
 
     // Get the places again after the upsert so they can be enriched.
     // Ensure we extract the row array (`data`) and push rows, not the full response object.
-    const { data: fetchedPlacesData, error: fetchError } = await supabase.from('places').select('*');
+    const { data: fetchedPlacesData, error: fetchError } = await supabase
+      .from('places')
+      .select('*')
+      .limit(1000);
+
     if (fetchError) {
       console.error('Failed to fetch places after upsert:', fetchError.message || fetchError);
     }
+
     const fetchedRows = fetchedPlacesData || [];
-    console.log(`${fetchedRows.length} places gotten from the database`);
-    // Append each place row into processedPlaces so downstream filters work correctly.
+    console.log(`-> [STEP 8.1: DB FETCH COMPLETE]: ${fetchedRows.length} places retrieved from Supabase.`);
     processedPlaces.push(...fetchedRows);
 
+    console.log(`-> [STEP 9: ENRICHMENT TARGETING]`);
 
-    console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
-
-
-// ==========================================
     // FIRECRAWL ENRICHMENT PIPELINE
-    // ==========================================
-    
     const targetsToEnrich = processedPlaces.filter((place: any) => place.enrichment_status === 'raw_coordinates');
-    console.log(`Enriching ${targetsToEnrich.length} places`);
+    console.log(`-> [STEP 9.1: ENRICHMENT QUEUE]: ${targetsToEnrich.length} places marked raw_coordinates.`);
     if (targetsToEnrich.length > 0) {
-      console.log(`-> [ASYNC PIPELINE]: Spawning background enrichment for ${targetsToEnrich.length} target locations...`);
-
-      void (async () => {
-        for (const place of targetsToEnrich) {
-          console.log(`-> [FIRECRAWL]: Enriching place ${place.name} (ID: ${place.id})`);
-          await enrichPlaceWithFirecrawl(place, supabase);
-        }
-      })().catch((err) => console.error('Fatal background pipeline crash:', err));
+      console.log(`-> [ENRICHMENT PIPELINE]: Beginning enrichment for ${targetsToEnrich.length} place(s).`);
+      for (const place of targetsToEnrich) {
+        console.log(`-> [FIRECRAWL]: Enriching place ${place.name} (ID: ${place.id})`);
+        await enrichPlaceWithFirecrawl(place, supabase);
+      }
+      console.log(`-> [ENRICHMENT PIPELINE]: Completed enrichment for ${targetsToEnrich.length} place(s).`);
     }
 
     console.log(`-> [PIPELINE COMPLETED]`);
