@@ -1,93 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerInstance } from '@/utils/supabase/server';
 
-const FIRECRAWL_API_URL = process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev/v1';
-const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
-
-async function firecrawlRequest(path: string, body: Record<string, unknown>) {
-  if (!FIRECRAWL_API_KEY) {
-    return null;
-  }
-
-  const response = await fetch(`${FIRECRAWL_API_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Firecrawl request failed (${response.status}): ${errorText}`);
-  }
-
-  return response.json();
-}
-
-function buildFirecrawlSearchQuery(place: Record<string, any>) {
-  const baseName = place.name || 'local business';
-  const address = place.address && place.address !== 'Local Coordinate Point' ? place.address : '';
-  return `${baseName} ${address} website address`.trim();
-}
-
-async function enrichPlaceWithFirecrawl(place: Record<string, any>, supabase: any) {
-  if (!FIRECRAWL_API_KEY) {
-    console.log('-> [FIRECRAWL]: Skipping enrichment because FIRECRAWL_API_KEY is not configured.');
-    return;
-  }
-
-  try {
-    console.log(`-> [FIRECRAWL RUNNING]: Deep searching for ${place.name}`);
-
-    let discoveredUrl: string | null = null;
-    let discoveredSnippet = '';
-
-    if (typeof place.website === 'string' && place.website.startsWith('http')) {
-      const scrapeData = await firecrawlRequest('/scrape', {
-        url: place.website,
-        formats: ['markdown'],
-      });
-
-      discoveredUrl = place.website;
-      discoveredSnippet = scrapeData?.markdown || scrapeData?.content || '';
-    } else {
-      const searchData = await firecrawlRequest('/search', {
-        query: buildFirecrawlSearchQuery(place),
-        limit: 3,
-      });
-
-            console.log(`Scraping search data for ${place.name} with the following query: ${searchData}`);
-
-      const firstResult = Array.isArray(searchData?.data) ? searchData.data[0] : null;
-      discoveredUrl = firstResult?.url || firstResult?.website || null;
-      discoveredSnippet = firstResult?.snippet || firstResult?.markdown || '';
-    }
-
-    if (!discoveredUrl) {
-      console.log(`-> [FIRECRAWL]: No discoverable URL found for ${place.name}`);
-      return;
-    }
-
-    const updatePayload: Record<string, unknown> = {
-      enrichment_status: 'enriched',
-      website: discoveredUrl,
-    };
-
-    if (typeof discoveredSnippet === 'string' && discoveredSnippet.length > 0 && (!place.address || place.address === 'Local Coordinate Point')) {
-      const addressHint = discoveredSnippet.match(/\b\d+\s+[A-Za-z0-9 .,'-]+\b/);
-      if (addressHint?.[0]) {
-        updatePayload.address = addressHint[0];
-      }
-    }
-    console.log(`Firecrawl data for ${place.name} is: ${updatePayload}`)
-    await supabase.from('places').update(updatePayload).eq('id', place.id);
-  } catch (error) {
-    console.error(`-> [FIRECRAWL ERROR] Failed background fetch for ${place.id}:`, error);
-  }
-}
-
 export async function POST(req: Request) {
   console.log("================ [SCAN LOG START] ================");
   try {
@@ -190,39 +103,33 @@ export async function POST(req: Request) {
     }
 
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
+    console.log('-> [STEP 9: ENRICHMENT QUEUEING]: Triggered safe async enrichment worker.');
 
-    // Get the places again after the upsert so they can be enriched.
-    // Ensure we extract the row array (`data`) and push rows, not the full response object.
-    const { data: fetchedPlacesData, error: fetchError } = await supabase
-      .from('places')
-      .select('*')
-      .limit(1000);
+    try {
+      const enrichUrl = new URL('/api/enrich', req.url).toString();
+      const enrichResponse = await fetch(enrichUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ batchSize: 10 }),
+      });
 
-    if (fetchError) {
-      console.error('Failed to fetch places after upsert:', fetchError.message || fetchError);
-    }
-
-    const fetchedRows = fetchedPlacesData || [];
-    console.log(`-> [STEP 8.1: DB FETCH COMPLETE]: ${fetchedRows.length} places retrieved from Supabase.`);
-    processedPlaces.push(...fetchedRows);
-
-    console.log(`-> [STEP 9: ENRICHMENT TARGETING]`);
-
-    // FIRECRAWL ENRICHMENT PIPELINE
-    const targetsToEnrich = processedPlaces.filter((place: any) => place.enrichment_status === 'raw_coordinates');
-    console.log(`-> [STEP 9.1: ENRICHMENT QUEUE]: ${targetsToEnrich.length} places marked raw_coordinates.`);
-    if (targetsToEnrich.length > 0) {
-      console.log(`-> [ENRICHMENT PIPELINE]: Beginning enrichment for ${targetsToEnrich.length} place(s).`);
-      for (const place of targetsToEnrich) {
-        console.log(`-> [FIRECRAWL]: Enriching place ${place.name} (ID: ${place.id})`);
-        await enrichPlaceWithFirecrawl(place, supabase);
+      if (!enrichResponse.ok) {
+        const enrichError = await enrichResponse.text();
+        console.warn('-> [ENRICH WORKER]: Enrich endpoint returned an error:', enrichError);
+      } else {
+        const result = await enrichResponse.json();
+        console.log('-> [ENRICH WORKER]: Triggered safe batch enrichment', result);
       }
-      console.log(`-> [ENRICHMENT PIPELINE]: Completed enrichment for ${targetsToEnrich.length} place(s).`);
+    } catch (workerError) {
+      console.warn('-> [ENRICH WORKER]: Failed to call background enrichment endpoint:', workerError);
     }
 
-    console.log(`-> [PIPELINE COMPLETED]`);
+  
     console.log('================ [SCAN LOG END] ================');
-    return NextResponse.json({ success: true, count: processedPlaces.length, places: processedPlaces });
+
+    return NextResponse.json({ success: true, count: data?.length ?? 0, places: data || [] });
   } catch (err: any) {
     console.error("❌ [CRITICAL ENDPOINT CRASH LOG]:", err.message);
     console.log("================ [SCAN LOG END] ================");
