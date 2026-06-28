@@ -190,7 +190,7 @@ export async function POST(req: Request) {
     }
 
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
-    processedPlaces.push(data);
+    processedPlaces.push(await supabase.from('places').select());
 
 
     console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
