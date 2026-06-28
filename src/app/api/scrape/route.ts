@@ -191,10 +191,16 @@ export async function POST(req: Request) {
 
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
 
-    //get the places again after the upsert so they can be enriched
-    let fetchedPlaces = await supabase.from("places").select("*");
-    console.log(`${fetchedPlaces.data?.length} places gotten from the database`)
-    processedPlaces.push(fetchedPlaces);
+    // Get the places again after the upsert so they can be enriched.
+    // Ensure we extract the row array (`data`) and push rows, not the full response object.
+    const { data: fetchedPlacesData, error: fetchError } = await supabase.from('places').select('*');
+    if (fetchError) {
+      console.error('Failed to fetch places after upsert:', fetchError.message || fetchError);
+    }
+    const fetchedRows = fetchedPlacesData || [];
+    console.log(`${fetchedRows.length} places gotten from the database`);
+    // Append each place row into processedPlaces so downstream filters work correctly.
+    processedPlaces.push(...fetchedRows);
 
 
     console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
