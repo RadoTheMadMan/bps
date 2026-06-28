@@ -79,7 +79,7 @@ async function enrichPlaceWithFirecrawl(place: Record<string, any>, supabase: an
         updatePayload.address = addressHint[0];
       }
     }
-
+    console.log(`Firecrawl data for ${place.name} is: ${updatePayload}`)
     await supabase.from('places').update(updatePayload).eq('id', place.id);
   } catch (error) {
     console.error(`-> [FIRECRAWL ERROR] Failed background fetch for ${place.id}:`, error);
@@ -178,7 +178,7 @@ export async function POST(req: Request) {
         // If your table relies on a unique OSM ID or coordinate constraint instead of a auto-UUID, 
         // make sure it is included in the payload and targeted here in 'onConflict'.
         onConflict: 'id', 
-        ignoreDuplicates: true,
+        ignoreDuplicates: false,
       })
       .select();
 
@@ -188,7 +188,7 @@ export async function POST(req: Request) {
     }
 
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
-    processedPlaces.push(...(data ?? []));
+    processedPlaces.push(upsertPayload);
 
 
     console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
