@@ -180,7 +180,7 @@ export async function POST(req: Request) {
         // If your table relies on a unique OSM ID or coordinate constraint instead of a auto-UUID, 
         // make sure it is included in the payload and targeted here in 'onConflict'.
         onConflict: 'id', 
-        ignoreDuplicates: false,
+        ignoreDuplicates: true,
       })
       .select();
 
@@ -190,7 +190,7 @@ export async function POST(req: Request) {
     }
 
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
-    processedPlaces.push(upsertPayload);
+    processedPlaces.push(discoveredElements);
 
 
     console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
