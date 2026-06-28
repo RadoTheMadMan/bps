@@ -179,7 +179,7 @@ export async function POST(req: Request) {
       .upsert(upsertPayload, {
         // If your table relies on a unique OSM ID or coordinate constraint instead of a auto-UUID, 
         // make sure it is included in the payload and targeted here in 'onConflict'.
-        onConflict: 'name,latitude,longitude', 
+        onConflict: 'latitude,longitude', 
         ignoreDuplicates: true,
       })
       .select();
@@ -200,7 +200,7 @@ export async function POST(req: Request) {
     // FIRECRAWL ENRICHMENT PIPELINE
     // ==========================================
     const targetsToEnrich = processedPlaces.filter((place: any) => place.enrichment_status === 'raw_coordinates');
-
+    console.log(`Enriching ${targetsToEnrich.length} places`);
     if (targetsToEnrich.length > 0) {
       console.log(`-> [ASYNC PIPELINE]: Spawning background enrichment for ${targetsToEnrich.length} target locations...`);
 
