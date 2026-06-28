@@ -194,7 +194,7 @@ export async function POST(req: Request) {
     //get the places again after the upsert so they can be enriched
     let fetchedPlaces = await supabase.from("places").select("*");
     console.log(`${fetchedPlaces.data?.length} places gotten from the database`)
-    processedPlaces.push(fetchedPlaces.data);
+    processedPlaces.push(fetchedPlaces);
 
 
     console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
@@ -203,10 +203,6 @@ export async function POST(req: Request) {
 // ==========================================
     // FIRECRAWL ENRICHMENT PIPELINE
     // ==========================================
-    for(let place in processedPlaces)
-      {
-        console.log(place);
-      }
     
     const targetsToEnrich = processedPlaces.filter((place: any) => place.enrichment_status === 'raw_coordinates');
     console.log(`Enriching ${targetsToEnrich.length} places`);
