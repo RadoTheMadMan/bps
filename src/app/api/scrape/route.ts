@@ -190,7 +190,11 @@ export async function POST(req: Request) {
     }
 
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
-    processedPlaces.push(await supabase.from('places').select("*"));
+
+    //get the places again after the upsert so they can be enriched
+    let fetchedPlaces = await supabase.from("places").select("*");
+    console.log(`${fetchedPlaces.data?.length} places gotten from the database`)
+    processedPlaces.push(fetchedPlaces.data);
 
 
     console.log(`-> [STEP 9: ASYNC ENRICHMENT OF ADDRESS IN THE PLACEMENT AND BULK RE-UPSERT]`);
