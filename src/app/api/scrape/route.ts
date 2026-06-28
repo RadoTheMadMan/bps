@@ -58,6 +58,8 @@ async function enrichPlaceWithFirecrawl(place: Record<string, any>, supabase: an
         limit: 3,
       });
 
+            console.log(`Scraping search data for ${place.name} with the following query: ${searchData}`);
+
       const firstResult = Array.isArray(searchData?.data) ? searchData.data[0] : null;
       discoveredUrl = firstResult?.url || firstResult?.website || null;
       discoveredSnippet = firstResult?.snippet || firstResult?.markdown || '';
