@@ -98,3 +98,66 @@ export async function enrichPlaceWithFirecrawl(place: PlaceRecord, supabase: any
     return false;
   }
 }
+
+export type EnrichmentBatchResult = {
+  success: boolean;
+  processed: number;
+  remaining: number;
+  continue: boolean;
+  error?: string | null;
+};
+
+export async function runEnrichmentBatch(supabase: any, batchSize = 10): Promise<EnrichmentBatchResult> {
+  const { data: targets, error: selectError } = await supabase
+    .from('places')
+    .select('id, name, website, address, enrichment_status, latitude, longitude')
+    .eq('enrichment_status', 'raw_coordinates')
+    .limit(batchSize);
+
+  if (selectError) {
+    console.error('Failed to select enrichment targets:', selectError);
+    return { success: false, processed: 0, remaining: 0, continue: false, error: selectError.message || 'Selection failed' };
+  }
+
+  if (!targets || targets.length === 0) {
+    return { success: true, processed: 0, remaining: 0, continue: false };
+  }
+
+  const targetIds = targets.map((place: PlaceRecord) => place.id).filter(Boolean);
+  if (targetIds.length === 0) {
+    return { success: true, processed: 0, remaining: 0, continue: false };
+  }
+
+  const { error: lockError } = await supabase
+    .from('places')
+    .update({ enrichment_status: 'in_progress' })
+    .in('id', targetIds);
+
+  if (lockError) {
+    console.error('Failed to lock enrichment targets:', lockError);
+    return { success: false, processed: 0, remaining: 0, continue: false, error: lockError.message || 'Lock failed' };
+  }
+
+  let processed = 0;
+  for (const place of targets as PlaceRecord[]) {
+    console.log(`-> [ENRICHMENT BATCH]: Processing place ${place.name} (ID: ${place.id})`);
+    await enrichPlaceWithFirecrawl(place, supabase);
+    processed += 1;
+  }
+
+  const { count: remainingCount, error: countError } = await supabase
+    .from('places')
+    .select('id', { count: 'exact', head: false })
+    .eq('enrichment_status', 'raw_coordinates');
+
+  if (countError) {
+    console.warn('Failed to count remaining enrichment targets:', countError);
+  }
+
+  return {
+    success: true,
+    processed,
+    remaining: remainingCount ?? 0,
+    continue: (remainingCount ?? 0) > 0,
+  };
+}

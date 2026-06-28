@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerInstance } from '@/utils/supabase/server';
+import { runEnrichmentBatch } from '@/lib/enrichment';
 
 export async function POST(req: Request) {
   console.log("================ [SCAN LOG START] ================");
@@ -103,30 +104,15 @@ export async function POST(req: Request) {
     }
 
     console.log(`-> [STEP 8: UPSERT SUCCESS]: ${data?.length ?? 0} entries successfully upserted to Supabase.`);
-    console.log('-> [STEP 9: ENRICHMENT QUEUEING]: Triggered safe async enrichment worker.');
+    console.log('-> [STEP 9: ENRICHMENT QUEUEING]: Running safe batch enrichment directly.');
 
     try {
-      const enrichUrl = new URL('/api/enrich', req.url).toString();
-      const enrichResponse = await fetch(enrichUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ batchSize: 10 }),
-      });
-
-      if (!enrichResponse.ok) {
-        const enrichError = await enrichResponse.text();
-        console.warn('-> [ENRICH WORKER]: Enrich endpoint returned an error:', enrichError);
-      } else {
-        const result = await enrichResponse.json();
-        console.log('-> [ENRICH WORKER]: Triggered safe batch enrichment', result);
-      }
+      const enrichResult = await runEnrichmentBatch(supabase, 10);
+      console.log('-> [ENRICH WORKER]: Completed safe batch enrichment', enrichResult);
     } catch (workerError) {
-      console.warn('-> [ENRICH WORKER]: Failed to call background enrichment endpoint:', workerError);
+      console.warn('-> [ENRICH WORKER]: Failed to run safe batch enrichment:', workerError);
     }
 
-  
     console.log('================ [SCAN LOG END] ================');
 
     return NextResponse.json({ success: true, count: data?.length ?? 0, places: data || [] });
