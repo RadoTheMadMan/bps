@@ -179,7 +179,7 @@ export async function POST(req: Request) {
       .upsert(upsertPayload, {
         // If your table relies on a unique OSM ID or coordinate constraint instead of a auto-UUID, 
         // make sure it is included in the payload and targeted here in 'onConflict'.
-        onConflict: 'id', 
+        onConflict: 'name,latitude,longitude', 
         ignoreDuplicates: true,
       })
       .select();
