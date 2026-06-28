@@ -217,6 +217,7 @@ export async function POST(req: Request) {
 
       void (async () => {
         for (const place of targetsToEnrich) {
+          console.log(`-> [FIRECRAWL]: Enriching place ${place.name} (ID: ${place.id})`);
           await enrichPlaceWithFirecrawl(place, supabase);
         }
       })().catch((err) => console.error('Fatal background pipeline crash:', err));
