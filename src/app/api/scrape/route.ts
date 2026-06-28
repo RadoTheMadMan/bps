@@ -203,6 +203,11 @@ export async function POST(req: Request) {
 // ==========================================
     // FIRECRAWL ENRICHMENT PIPELINE
     // ==========================================
+    for(let place in processedPlaces)
+      {
+        console.log(place);
+      }
+    
     const targetsToEnrich = processedPlaces.filter((place: any) => place.enrichment_status === 'raw_coordinates');
     console.log(`Enriching ${targetsToEnrich.length} places`);
     if (targetsToEnrich.length > 0) {
