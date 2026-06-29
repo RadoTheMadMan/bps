@@ -12,6 +12,18 @@ export type PlaceRecord = {
   longitude?: number;
 };
 
+class FirecrawlRequestError extends Error {
+  status: number;
+  details: unknown;
+
+  constructor(message: string, status: number, details: unknown) {
+    super(message);
+    this.name = 'FirecrawlRequestError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
 export async function firecrawlRequest(path: string, body: Record<string, unknown>) {
   if (!FIRECRAWL_API_KEY) {
     throw new Error('FIRECRAWL_API_KEY is not configured.');
@@ -28,7 +40,16 @@ export async function firecrawlRequest(path: string, body: Record<string, unknow
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Firecrawl request failed (${response.status}): ${errorText}`);
+    let details: unknown = errorText;
+    try {
+      details = JSON.parse(errorText);
+    } catch {
+      details = errorText;
+    }
+    const message = typeof details === 'object' && details !== null && 'error' in details
+      ? `${(details as any).error}`
+      : errorText;
+    throw new FirecrawlRequestError(`Firecrawl request failed (${response.status}): ${message}`, response.status, details);
   }
 
   return response.json();
@@ -225,9 +246,12 @@ export async function enrichPlaceWithFirecrawl(place: PlaceRecord, supabase: any
     console.log(`-> [FIRECRAWL UPDATE]: ${place.name || place.id} -> ${JSON.stringify(updatePayload)}`);
     await supabase.from('places').update(updatePayload).eq('id', place.id);
     return true;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`-> [FIRECRAWL ERROR] Failed enrichment for ${place.id}:`, error);
-    await supabase.from('places').update({ enrichment_status: 'raw_coordinates' }).eq('id', place.id);
+
+    const shouldFail = error instanceof FirecrawlRequestError && error.status === 403;
+    await supabase.from('places').update({ enrichment_status: shouldFail ? 'failed' : 'raw_coordinates' }).eq('id', place.id);
+
     return false;
   }
 }
