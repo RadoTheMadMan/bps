@@ -171,7 +171,7 @@ export async function enrichPlaceWithFirecrawl(place: PlaceRecord, supabase: any
         formats: ['markdown'],
       });
 
-      discoveredUrl = place.website;
+      discoveredUrl = place.website ?? null;
       discoveredSnippet = scrapeData?.markdown || scrapeData?.content || '';
       console.log(`-> [FIRECRAWL SCRAPE]: Existing website scraped for ${place.name}`);
     }
